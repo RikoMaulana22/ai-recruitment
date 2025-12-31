@@ -5,6 +5,7 @@ use App\Livewire\Candidate\UploadCv; // Import dulu
 use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\CandidateDetail;
 use App\Livewire\Interview\ChatBot;
+use App\Livewire\Interview\VideoRecorder;
 
 
 
@@ -37,7 +38,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::get('/candidates/{candidate}', CandidateDetail::class)->name('candidates.show');
 
-Route::get('/interview/{candidate}', ChatBot::class)->name('interview.start');
+Route::get('/interview/{candidate}', VideoRecorder::class)->name('interview.start');
 
 Route::view('/interview-done', 'interview-done')->name('interview.done');
 
