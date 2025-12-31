@@ -3,11 +3,13 @@
 namespace App\Livewire\Candidate;
 
 use Livewire\Component;
-use Livewire\WithFileUploads; // Wajib untuk upload file
+use Livewire\WithFileUploads;
 use App\Models\Candidate;
-use Livewire\Attributes\Layout;
+use Livewire\Attributes\Layout; // Import class Layout
+use App\Jobs\AnalyzeResumeJob;
 
-
+// PERBAIKAN: Tambahkan atribut ini agar Livewire tahu harus pakai layout yang mana
+#[Layout('layouts.guest')]
 class UploadCv extends Component
 {
     use WithFileUploads;
@@ -15,26 +17,24 @@ class UploadCv extends Component
     public $name;
     public $email;
     public $phone;
-    public $resume; // Variable penampung file sementara
+    public $resume;
 
-    // Aturan Validasi
     protected $rules = [
         'name' => 'required|min:3',
         'email' => 'required|email|unique:candidates,email',
         'phone' => 'required|numeric',
-        'resume' => 'required|file|mimes:pdf|max:2048', // Maksimal 2MB, wajib PDF
+        'resume' => 'required|file|mimes:pdf|max:2048',
     ];
 
     public function save()
     {
         $this->validate();
 
-        // 1. Simpan File PDF ke folder 'cv_uploads'
-        // Hasilnya path seperti: cv_uploads/randomname.pdf
+        // 1. Simpan File
         $path = $this->resume->store('cv_uploads', 'local');
 
-        // 2. Simpan Data ke Database
-        Candidate::create([
+        // 2. Simpan ke Database
+        $candidate = Candidate::create([
             'name' => $this->name,
             'email' => $this->email,
             'phone' => $this->phone,
@@ -42,9 +42,15 @@ class UploadCv extends Component
             'status' => 'pending'
         ]);
 
-        // 3. Reset Form & Beri Pesan Sukses
-        $this->reset();
-        session()->flash('message', 'CV berhasil dikirim! AI kami sedang memprosesnya.');
+        // 3. Panggil AI Job (Biarkan dia kerja di background)
+        AnalyzeResumeJob::dispatch($candidate->id);
+
+        // 4. HAPUS BAGIAN INI:
+        // $this->reset();
+        // session()->flash('message', '...');
+
+        // 5. GANTI DENGAN INI (Redirect langsung ke ruang Interview):
+        return redirect()->route('interview.start', ['candidate' => $candidate->id]);
     }
 
     public function render()

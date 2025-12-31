@@ -10,35 +10,41 @@
     <form wire:submit.prevent="save">
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2">Nama Lengkap</label>
-            <input type="text" wire:model="name" class="w-full px-3 py-2 border rounded shadow-sm focus:outline-none focus:border-blue-500">
+            <input type="text" wire:model="name"
+                class="w-full px-3 py-2 border rounded shadow-sm focus:outline-none focus:border-blue-500">
             @error('name') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
 
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2">Email</label>
-            <input type="email" wire:model="email" class="w-full px-3 py-2 border rounded shadow-sm focus:outline-none focus:border-blue-500">
+            <input type="email" wire:model="email"
+                class="w-full px-3 py-2 border rounded shadow-sm focus:outline-none focus:border-blue-500">
             @error('email') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
 
         <div class="mb-4">
             <label class="block text-gray-700 text-sm font-bold mb-2">No. WhatsApp</label>
-            <input type="text" wire:model="phone" class="w-full px-3 py-2 border rounded shadow-sm focus:outline-none focus:border-blue-500">
+            <input type="text" wire:model="phone"
+                class="w-full px-3 py-2 border rounded shadow-sm focus:outline-none focus:border-blue-500">
             @error('phone') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
 
         <div class="mb-6">
             <label class="block text-gray-700 text-sm font-bold mb-2">Upload CV (PDF Max 2MB)</label>
-            <input type="file" wire:model="resume" class="w-full p-2 border border-dashed border-gray-400 rounded bg-gray-50">
+            <input type="file" wire:model="resume"
+                class="w-full p-2 border border-dashed border-gray-400 rounded bg-gray-50">
             <div wire:loading wire:target="resume" class="text-sm text-blue-500 mt-1">Sedang mengunggah...</div>
             @error('resume') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
 
-        <button type="submit" 
-                class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition disabled:opacity-50"
-                wire:loading.attr="disabled"
-                wire:target="save">
+        <button type="submit" wire:loading.attr="disabled" wire:target="save" class="w-full rounded-xl px-4 py-3 font-semibold text-white shadow-lg transition
+           bg-gradient-to-r from-blue-600 via-indigo-600 to-fuchsia-600
+           hover:from-blue-500 hover:via-indigo-500 hover:to-fuchsia-500
+           focus:outline-none focus:ring-4 focus:ring-blue-200
+           disabled:opacity-60 disabled:cursor-not-allowed">
             <span wire:loading.remove wire:target="save">Kirim Lamaran</span>
             <span wire:loading wire:target="save">Sedang Memproses...</span>
         </button>
+
     </form>
 </div>

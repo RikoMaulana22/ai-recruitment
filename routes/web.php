@@ -2,6 +2,12 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Livewire\Candidate\UploadCv; // Import dulu
+use App\Livewire\Admin\Dashboard;
+use App\Livewire\Admin\CandidateDetail;
+use App\Livewire\Interview\ChatBot;
+
+
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -23,6 +29,16 @@ Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
 
-Route::get('/apply', UploadCv::class)->name('apply');    
+Route::get('/apply', UploadCv::class)->name('apply');   
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard', Dashboard::class)->name('dashboard');
+});
+
+Route::get('/candidates/{candidate}', CandidateDetail::class)->name('candidates.show');
+
+Route::get('/interview/{candidate}', ChatBot::class)->name('interview.start');
+
+Route::view('/interview-done', 'interview-done')->name('interview.done');
 
 require __DIR__.'/auth.php';
