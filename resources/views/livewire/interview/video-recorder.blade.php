@@ -17,19 +17,20 @@
     </div>
 
     {{-- Camera box (dikunci kecil + ignore) --}}
-    <div wire:ignore class="relative w-full max-w-[220px] bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-700 aspect-[3/4]">
-        <video id="preview" autoplay muted playsinline class="w-full h-full object-cover transform scale-x-[-1]"></video>
-        <video id="playback" controls playsinline class="w-full h-full object-cover hidden"></video>
+    <div class="relative w-[320px] bg-black rounded-xl overflow-hidden shadow-2xl border border-gray-700" style="aspect-ratio: 16/9;">
+        
+        <video id="preview" autoplay muted class="w-full h-full object-cover transform scale-x-[-1]"></video>
+        
+        <video id="playback" controls class="w-full h-full object-cover hidden"></video>
 
-        {{-- Loading overlay --}}
-        <div wire:loading wire:target="videoFile,saveVideo" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50">
+        <div wire:loading wire:target="videoFile" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50">
             <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mb-2"></div>
-            <p class="text-xs text-blue-400">Memproses...</p>
+            <p class="text-xs text-blue-400">Upload...</p>
         </div>
 
-        <div id="recIndicator" class="hidden absolute top-2 right-2 flex items-center gap-1.5 bg-red-600/90 px-2 py-0.5 rounded backdrop-blur-sm">
+        <div id="recIndicator" class="hidden absolute top-2 right-2 flex items-center gap-1.5 bg-red-600/90 px-1.5 py-0.5 rounded backdrop-blur-sm">
             <div class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
-            <span class="text-[9px] font-bold uppercase tracking-wider">REC</span>
+            <span class="text-[8px] font-bold uppercase tracking-wider">REC</span>
         </div>
     </div>
 

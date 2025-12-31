@@ -82,56 +82,59 @@
             </div>
 
             <div class="mt-8 border-t pt-8">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6">🎤 Hasil AI Interview</h2>
+    <h2 class="text-2xl font-bold text-gray-900 mb-6">🎬 Hasil Video Interview</h2>
 
-                @if($candidate->interview)
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="bg-indigo-50 p-6 rounded-xl border border-indigo-100">
-                            <div class="text-sm text-indigo-600 font-bold uppercase tracking-wider mb-1">Skor Bicara
-                            </div>
-                            <div class="text-4xl font-black text-indigo-900">
-                                {{ $candidate->interview->interview_score ?? 0 }}<span
-                                    class="text-lg text-indigo-400">/100</span></div>
+    @if($candidate->interview)
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            @php
+                $labels = [
+                    1 => 'Perkenalan & Pengalaman',
+                    2 => 'Pencapaian & Kegagalan',
+                    3 => 'Motivasi Gabung'
+                ];
+            @endphp
+
+            @foreach($labels as $step => $label)
+                @php $videoField = 'video_answer_' . $step; @endphp
+                
+                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 class="font-bold text-gray-700 mb-3 text-sm border-b pb-2">{{ $label }}</h3>
+                    
+                    @if(!empty($candidate->interview->$videoField))
+                        <div class="rounded-lg overflow-hidden bg-black aspect-video relative group">
+                            <video controls class="w-full h-full object-cover">
+                                <source src="{{ asset('storage/' . $candidate->interview->$videoField) }}" type="video/webm">
+                                <source src="{{ asset('storage/' . $candidate->interview->$videoField) }}" type="video/mp4">
+                                Browser Anda tidak mendukung pemutar video.
+                            </video>
                         </div>
-
-                        <div class="col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                            <h3 class="font-bold text-gray-800 mb-2">Kesimpulan Wawancara:</h3>
-                            <p class="text-gray-600 leading-relaxed">
-                                {{ $candidate->interview->interview_summary ?? 'Menunggu hasil...' }}
-                            </p>
+                        <div class="mt-2 text-xs text-green-600 font-bold flex items-center gap-1">
+                            ✅ Video Terkirim
                         </div>
-                    </div>
-
-                    <div class="mt-6" x-data="{ open: false }">
-                        <button @click="open = !open"
-                            class="flex items-center justify-between w-full bg-gray-100 px-4 py-3 rounded-lg text-left font-semibold text-gray-700 hover:bg-gray-200 transition">
-                            <span>📄 Lihat Transkrip Percakapan Lengkap</span>
-                            <span x-show="!open">▼</span>
-                            <span x-show="open">▲</span>
-                        </button>
-
-                        <div x-show="open"
-                            class="mt-2 bg-white border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto space-y-3">
-                            @if(is_array($candidate->interview->chat_history))
-                                @foreach($candidate->interview->chat_history as $msg)
-                                    <div
-                                        class="p-3 rounded-lg text-sm {{ $msg['role'] == 'assistant' ? 'bg-gray-50 text-gray-800' : 'bg-blue-50 text-blue-900 ml-8' }}">
-                                        <span
-                                            class="font-bold text-xs uppercase block mb-1 opacity-50">{{ $msg['role'] }}</span>
-                                        {{ $msg['content'] }}
-                                    </div>
-                                @endforeach
-                            @else
-                                <p class="text-gray-400 italic">Format chat tidak valid.</p>
-                            @endif
+                    @else
+                        <div class="aspect-video bg-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400">
+                            <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            <span class="text-xs font-semibold">Belum ada rekaman</span>
                         </div>
-                    </div>
-                @else
-                    <div class="bg-yellow-50 text-yellow-800 p-4 rounded-lg border border-yellow-200">
-                        Kandidat belum melakukan sesi wawancara.
-                    </div>
-                @endif
+                    @endif
+                </div>
+            @endforeach
+        </div>
+
+        <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100 text-blue-800 text-sm">
+            <strong>Catatan:</strong> Fitur analisis AI otomatis untuk video sedang dalam pengembangan. Saat ini Anda bisa menilai manual dengan menonton video di atas.
+        </div>
+
+    @else
+        <div class="bg-yellow-50 text-yellow-800 p-4 rounded-lg border border-yellow-200 flex items-center gap-3">
+            <span class="text-2xl">⏳</span>
+            <div>
+                <strong>Belum ada data interview.</strong>
+                <p class="text-sm">Kandidat ini belum memulai atau menyelesaikan sesi perekaman video.</p>
             </div>
+        </div>
+    @endif
+</div>
 
             <div class="mt-8 border-t pt-8 pb-10">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">⚖️ Keputusan Akhir</h2>
