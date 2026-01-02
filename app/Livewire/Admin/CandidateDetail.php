@@ -33,4 +33,10 @@ class CandidateDetail extends Component
         $this->candidate->update(['status' => 'rejected']);
         session()->flash('message', 'Kandidat telah DITOLAK.');
     }
+
+    public function regrade($interviewId)
+{
+    \App\Jobs\GradeInterviewJob::dispatch($interviewId);
+    session()->flash('message', 'Perintah penilaian ulang dikirim ke AI. Tunggu sebentar...');
+}
 }

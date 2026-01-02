@@ -6,6 +6,7 @@ use Livewire\Component;
 use App\Models\Candidate;
 use Livewire\Attributes\Layout;
 use Livewire\WithPagination; // Agar tabel tidak kepanjangan
+use App\Livewire\Actions\Logout;
 
 #[Layout('layouts.app')]
 class Dashboard extends Component
@@ -20,6 +21,11 @@ class Dashboard extends Component
     public function updatedSearch()
     {
         $this->resetPage();
+    }
+    public function logout(Logout $logout): void
+    {
+        $logout(); // Lakukan proses logout
+        $this->redirect('/', navigate: true); // Redirect ke halaman depan (Welcome)
     }
 
     public function render()

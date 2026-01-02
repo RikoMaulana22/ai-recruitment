@@ -7,8 +7,9 @@ use App\Models\Candidate;
 use App\Models\Interview;
 use Livewire\WithFileUploads;
 use Livewire\Attributes\Layout;
+use App\Jobs\GradeInterviewJob;
 
-#[Layout('layouts.chat')] // Kita pakai layout full screen yang tadi
+#[Layout('layouts.chat')]
 class VideoRecorder extends Component
 {
     use WithFileUploads;
@@ -16,10 +17,9 @@ class VideoRecorder extends Component
     public Candidate $candidate;
     public Interview $interview;
 
-    public $currentStep = 1; // 1, 2, atau 3
-    public $videoFile; // File video sementara
+    public $currentStep = 1;
+    public $videoFile; // File temporary
 
-    // Daftar Pertanyaan
     public $questions = [
         1 => 'Silakan perkenalkan diri Anda dan ceritakan pengalaman kerja paling relevan.',
         2 => 'Sebutkan satu pencapaian terbesar Anda dan satu kegagalan yang pernah Anda alami.',
@@ -32,28 +32,31 @@ class VideoRecorder extends Component
         $this->interview = Interview::firstOrCreate(['candidate_id' => $candidate->id]);
     }
 
-    // Fungsi dipanggil saat user upload video selesai
     public function saveVideo()
     {
+        // Validasi
         $this->validate([
-            'videoFile' => 'required|mimes:mp4,webm,mov|max:51200', // Max 50MB
+            'videoFile' => 'required|file|max:51200', // 50MB Max
         ]);
 
-        // Simpan file ke storage
+        // Simpan File
         $path = $this->videoFile->store('interview_videos', 'public');
 
-        // Update database sesuai step
+        // Update Database
         $column = 'video_answer_' . $this->currentStep;
         $this->interview->update([$column => $path]);
 
-        // Reset file dan lanjut ke pertanyaan berikutnya
-        $this->videoFile = null;
-        
+        // Reset Variable
+        $this->reset('videoFile');
+
+        // Logika Pindah Step
         if ($this->currentStep < 3) {
             $this->currentStep++;
+            // Kirim sinyal ke JS untuk reset kamera
+            $this->dispatch('step-complete'); 
         } else {
-            // Jika sudah pertanyaan ke-3, tandai selesai & panggil AI
-            // $this->dispatch('analyzeVideo', $this->interview->id); // Nanti kita buat Job-nya
+            // Jika sudah selesai semua, panggil AI
+            GradeInterviewJob::dispatch($this->interview->id);
             return redirect()->route('interview.done');
         }
     }

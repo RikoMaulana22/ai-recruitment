@@ -1,6 +1,21 @@
 <div class="py-6 bg-gray-50 min-h-screen">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
         
+        <div class="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">Dashboard Admin</h2>
+                <p class="text-sm text-gray-500">Selamat datang kembali, Admin.</p>
+            </div>
+            
+            <button wire:click="logout" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition flex items-center gap-2 transform hover:scale-105">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                </svg>
+                Logout
+            </button>
+        </div>
+
+
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div>
