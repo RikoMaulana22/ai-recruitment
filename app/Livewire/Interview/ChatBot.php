@@ -5,17 +5,18 @@ namespace App\Livewire\Interview;
 use Livewire\Component;
 use App\Models\Candidate;
 use App\Models\Interview;
-use Illuminate\Support\Facades\Http;
+use App\Services\GeminiService;
 use Livewire\Attributes\Layout;
+use Illuminate\Support\Facades\Log;
 
-#[Layout('layouts.chat')] // Tampilan full screen bersih
+#[Layout('layouts.chat')]
 class ChatBot extends Component
 {
     public Candidate $candidate;
     public Interview $interview;
     
     public $userMessage = '';
-    public $messages = []; // Menampung chat di layar: [['role' => 'user', 'content' => '...']]
+    public $messages = []; 
 
     public function mount(Candidate $candidate)
     {
@@ -32,135 +33,112 @@ class ChatBot extends Component
 
         // Jika chat masih kosong, AI menyapa duluan
         if (empty($this->messages)) {
-            $this->addMessage('assistant', "Halo {$candidate->name}, selamat datang! Saya AI Recruiter. Bisakah Anda ceritakan sedikit tentang diri Anda secara singkat?");
+            $initialGreeting = "Halo {$candidate->name}, selamat datang! Saya AI Recruiter. Bisakah Anda ceritakan sedikit tentang diri Anda secara singkat?";
+            $this->addMessage('assistant', $initialGreeting);
         }
     }
 
-    public function sendMessage()
+    /**
+     * Mengirim pesan user ke AI dan mendapatkan balasan.
+     */
+    public function sendMessage(GeminiService $gemini)
     {
         // 1. Validasi input user
         $this->validate(['userMessage' => 'required|string|max:1000']);
 
-        // 2. Simpan Chat User ke Layar
+        // 2. Simpan pesan user ke UI & DB
         $this->addMessage('user', $this->userMessage);
-        $tempMessage = $this->userMessage;
-        $this->userMessage = ''; // Reset input
-
-        // 3. Panggil AI Gemini (Loading state akan ditangani di frontend)
-        $this->askGemini($tempMessage);
-    }
-
-    private function addMessage($role, $content)
-    {
-        $this->messages[] = ['role' => $role, 'content' => $content];
         
-        // Simpan ke Database (Update JSON)
-        $this->interview->update(['chat_history' => $this->messages]);
-    }
-
-    private function askGemini($lastUserMessage)
-    {
-        $apiKey = env('GEMINI_API_KEY');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}";
-
-        // Konteks untuk AI (System Instruction)
-        $context = "
-            Anda adalah Pewawancara Kerja Profesional. 
+        // 3. Siapkan Prompt / Persona AI
+        $systemInstruction = "
+            Anda adalah HR Manager yang ramah tapi kritis.
             Kandidat: {$this->candidate->name}.
-            Ringkasan CV Kandidat: {$this->candidate->ai_summary}.
+            Ringkasan CV: {$this->candidate->ai_summary}.
             
-            Tugas: Lakukan wawancara singkat. Ajukan 1 pertanyaan saja dalam satu waktu.
-            Gali pengalaman mereka berdasarkan CV. Jangan terlalu kaku.
-            Jika sudah cukup (sekitar 5-6 pertukaran pesan), ucapkan terima kasih dan akhiri wawancara.
+            Tugas: Lakukan wawancara kerja.
+            1. Ajukan HANYA SATU pertanyaan dalam satu waktu.
+            2. Pertanyaan harus mengalir berdasarkan jawaban kandidat sebelumnya.
+            3. Fokus menggali pengalaman kerja dan skill teknis kandidat.
+            4. Jangan memberikan jawaban yang terlalu panjang.
+            5. Jika kandidat bertanya balik, jawab singkat lalu kembali ke topik wawancara.
         ";
 
-        // Format history chat agar AI ingat konteks sebelumnya
-        // Gemini butuh format khusus: "parts": [{"text": "..."}]
-        $contents = [];
-        $contents[] = ['role' => 'user', 'parts' => [['text' => $context]]]; // Instruksi awal sebagai user prompt pertama (trick)
+        // 4. Panggil Gemini Service (Kirim seluruh history chat untuk konteks)
+        // Service akan mengembalikan string teks balasan
+        $aiReply = $gemini->generateChatResponse($this->messages, $systemInstruction);
 
-        foreach ($this->messages as $msg) {
-            // Mapping role: 'assistant' -> 'model' (Khusus Gemini)
-            $role = ($msg['role'] == 'assistant') ? 'model' : 'user';
-            $contents[] = [
-                'role' => $role,
-                'parts' => [['text' => $msg['content']]]
-            ];
+        if (is_string($aiReply) && !empty($aiReply)) {
+             $this->addMessage('assistant', $aiReply);
+        } else {
+             // Fallback jika terjadi error koneksi atau format
+             $this->addMessage('assistant', "Maaf, koneksi saya terputus sebentar. Bisakah Anda mengulangi jawaban Anda?");
         }
 
-        try {
-            $response = Http::withHeaders(['Content-Type' => 'application/json'])
-                ->post($url, ['contents' => $contents]);
-
-            $result = $response->json();
-
-            if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-                $reply = $result['candidates'][0]['content']['parts'][0]['text'];
-                $this->addMessage('assistant', $reply);
-            }
-
-        } catch (\Exception $e) {
-            // Jika error, jangan crash, tapi beri pesan sopan
-            $this->addMessage('assistant', "Maaf, koneksi saya terputus sebentar. Bisa ulangi?");
-        }
+        // 5. Reset input user
+        $this->userMessage = '';
     }
 
-    public function finishInterview()
+    /**
+     * Mengakhiri interview dan melakukan penilaian otomatis.
+     */
+    public function finishInterview(GeminiService $gemini)
     {
-        // 1. Siapkan data chat untuk dinilai
+        // 1. Siapkan transkrip chat
         $chatString = json_encode($this->messages);
         
-        // 2. Siapkan Prompt Penilaian
-        $apiKey = env('GEMINI_API_KEY');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}";
-
-        $gradingPrompt = "
+        // 2. Siapkan Prompt Penilaian (Scoring)
+        $prompt = "
             Bertindaklah sebagai Senior HR Manager. Berikut adalah transkrip wawancara dengan kandidat bernama {$this->candidate->name}.
             
-            TRANSKRIP:
+            TRANSKRIP WAWANCARA:
             $chatString
 
             TUGAS:
-            Nilai performa kandidat berdasarkan jawaban mereka.
+            Nilai performa kandidat berdasarkan kualitas jawaban, kecocokan skill, dan sikap mereka selama wawancara.
             
-            OUTPUT JSON SAJA:
+            OUTPUT HARUS JSON VALID (Tanpa Markdown):
             {
-                \"score\": (0-100),
-                \"summary\": \"Ringkasan performa kandidat (maks 3 kalimat). Sebutkan kelebihan dan kekurangannya.\",
+                \"score\": (Isi dengan angka 0-100),
+                \"summary\": \"Ringkasan penilaian (maksimal 3 kalimat). Sebutkan kekuatan utama dan kelemahan (jika ada).\",
                 \"recommendation\": \"HIRE\" atau \"REJECT\"
             }
         ";
 
         try {
-            // 3. Kirim ke Gemini
-            $response = Http::withHeaders(['Content-Type' => 'application/json'])
-                ->post($url, [
-                    'contents' => [['parts' => [['text' => $gradingPrompt]]]]
+            // 3. Panggil Gemini Service (Mode JSON)
+            // Kita tidak butuh 'systemInstruction' khusus di sini, cukup prompt di atas.
+            $result = $gemini->generateJsonContent($prompt);
+            
+            // 4. Simpan hasil ke Database
+            if ($result) {
+                $this->interview->update([
+                    'interview_score' => $result['score'] ?? 0,
+                    'interview_summary' => $result['summary'] ?? 'Tidak ada ringkasan.',
                 ]);
-            
-            $result = $response->json();
-            
-            if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-                $rawJson = $result['candidates'][0]['content']['parts'][0]['text'];
-                $cleanJson = str_replace(['```json', '```', "\n"], '', $rawJson);
-                $grading = json_decode($cleanJson, true);
-
-                // 4. Simpan Nilai ke Database
-                if ($grading) {
-                    $this->interview->update([
-                        'interview_score' => $grading['score'] ?? 0,
-                        'interview_summary' => $grading['summary'] ?? 'Tidak ada ringkasan.',
-                    ]);
-                }
+                
+                // Opsional: Update status kandidat di tabel candidates
+                $this->candidate->update(['status' => 'interview_completed']);
+            } else {
+                Log::error("Grading Failed: Kosong atau format salah.");
             }
 
         } catch (\Exception $e) {
-            // Jika error, beri nilai default dulu
-            \Log::error("Grading Error: " . $e->getMessage());
+            Log::error("Grading Exception: " . $e->getMessage());
         }
 
-        // 5. Redirect ke halaman 'Terima Kasih'
+        // 5. Redirect ke halaman selesai
         return redirect()->route('interview.done');
+    }
+
+    /**
+     * Helper untuk update array pesan dan simpan ke DB.
+     */
+    private function addMessage($role, $content)
+    {
+        $this->messages[] = ['role' => $role, 'content' => $content];
+        
+        // Simpan ke kolom JSON di database agar state terjaga jika di-refresh
+        $this->interview->update(['chat_history' => $this->messages]);
     }
 
     public function render()

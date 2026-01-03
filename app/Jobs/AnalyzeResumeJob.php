@@ -9,7 +9,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Smalot\PdfParser\Parser;
-use Illuminate\Support\Facades\Http; // Pakai HTTP Client bawaan Laravel
+use App\Services\GeminiService;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class AnalyzeResumeJob implements ShouldQueue
 {
@@ -22,89 +24,50 @@ class AnalyzeResumeJob implements ShouldQueue
         $this->candidateId = $candidateId;
     }
 
-    public function handle(): void
+    public function handle(GeminiService $gemini): void
     {
         $candidate = Candidate::find($this->candidateId);
         if (!$candidate) return;
 
-        // 1. Baca Teks dari PDF (Tetap sama)
-        $filePath = storage_path('app/' . $candidate->resume_path);
+        // Gunakan Storage facade agar path benar (local/s3/public)
+        $filePath = Storage::disk('local')->path($candidate->resume_path);
         
+        // 1. Parse PDF
         try {
             $parser = new Parser();
             $pdf = $parser->parseFile($filePath);
-            $text = $pdf->getText();
+            $cleanText = preg_replace('/\s+/', ' ', trim($pdf->getText()));
             
-            // Bersihkan teks sedikit agar tidak terlalu kotor
-            $cleanText = preg_replace('/\s+/', ' ', trim($text));
+            // Simpan teks mentah untuk keperluan debugging/history
             $candidate->update(['resume_text' => substr($cleanText, 0, 5000)]);
-
         } catch (\Exception $e) {
-            \Log::error('PDF Error: ' . $e->getMessage());
-            return; 
+            Log::error("PDF Parser Error: " . $e->getMessage());
+            return;
         }
 
-        // 2. Siapkan Prompt Khusus Gemini
-        $apiKey = env('GEMINI_API_KEY');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}";
-
+        // 2. Analisis Mendalam oleh AI
         $prompt = "
-            Anda adalah HR Recruiter Expert. Tugas Anda adalah mengekstrak data dari teks CV berikut menjadi format JSON.
+            Analisis teks CV berikut.
+            CV TEXT: " . substr($cleanText, 0, 4000) . "
             
-            CV TEXT:
-            $cleanText
-
-            INSTRUKSI OUTPUT:
-            Hanya keluarkan JSON valid. Jangan ada markdown (```json).
-            Format JSON wajib seperti ini:
+            OUTPUT JSON (Strict):
             {
-                \"summary\": \"Ringkasan profil kandidat dalam Bahasa Indonesia (maks 2 kalimat)\",
-                \"skills\": [\"Skill 1\", \"Skill 2\", \"Skill 3\"],
-                \"score\": (Berikan nilai 0-100 berdasarkan relevansi skill),
+                \"summary\": \"Ringkasan profesional kandidat (Bahasa Indonesia)\",
+                \"skills\": [\"List\", \"Teknis\", \"Skill\"],
+                \"score\": (0-100 relevansi untuk posisi Staff IT),
                 \"recommendation\": \"HIRE\" atau \"REJECT\"
             }
         ";
 
-        try {
-            // 3. Kirim Request ke Google Gemini (Pakai HTTP Client Laravel)
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json'
-            ])->post($url, [
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $prompt]
-                        ]
-                    ]
-                ]
+        $data = $gemini->generateJsonContent($prompt, "Anda adalah Senior HR Recruiter.");
+
+        if ($data) {
+            $candidate->update([
+                'ai_analysis' => $data,
+                'score' => $data['score'] ?? 0,
+                'ai_summary' => $data['summary'] ?? '-',
+                'status' => 'analyzed'
             ]);
-
-            // 4. Ambil Jawaban
-            $result = $response->json();
-            
-            // Cek apakah ada jawaban valid
-            if (isset($result['candidates'][0]['content']['parts'][0]['text'])) {
-                $rawJson = $result['candidates'][0]['content']['parts'][0]['text'];
-                
-                // Bersihkan format markdown jika Gemini bandel kasih ```json
-                $cleanJson = str_replace(['```json', '```', "\n"], '', $rawJson);
-                $data = json_decode($cleanJson, true);
-
-                // 5. Simpan ke Database
-                if ($data) {
-                    $candidate->update([
-                        'ai_analysis' => $data,
-                        'score' => $data['score'] ?? 0,
-                        'ai_summary' => $data['summary'] ?? '-',
-                        'status' => 'analyzed'
-                    ]);
-                }
-            } else {
-                \Log::error('Gemini Error: ' . json_encode($result));
-            }
-
-        } catch (\Exception $e) {
-            \Log::error('API Connection Error: ' . $e->getMessage());
         }
     }
 }

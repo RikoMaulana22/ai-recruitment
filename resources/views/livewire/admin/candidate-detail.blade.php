@@ -70,7 +70,7 @@
                         <h3 class="text-lg font-semibold text-gray-800 mb-4">Aksi Lanjutan</h3>
 
                         @if($candidate->resume_path)
-                            <a href="{{ asset('storage/' . $candidate->resume_path) }}" target="_blank"
+                            <a href="{{ asset('ai-recruitment/storage/app/livewire-temp/' . $candidate->resume_path) }}" target="_blank"
                                 class="flex items-center justify-center gap-2 w-full mb-3 bg-white border border-gray-300 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-100 transition shadow-sm">
                                 📄 Lihat File PDF Asli
                             </a>
@@ -107,55 +107,36 @@
                     @endif
                 </div>
 
-                @if($candidate->interview)
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        @php
-                            $labels = [
-                                1 => 'Perkenalan & Pengalaman',
-                                2 => 'Pencapaian & Kegagalan',
-                                3 => 'Motivasi Gabung'
-                            ];
-                        @endphp
+                <div class="mt-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center">
+                        🎥 Jawaban Video Interview
+                    </h3>
 
-                        @foreach($labels as $step => $label)
-                            @php $videoField = 'video_answer_' . $step; @endphp
-                            
-                            <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col h-full">
-                                <h3 class="font-bold text-gray-700 mb-3 text-sm border-b pb-2">{{ $label }}</h3>
-                                
-                                <div class="flex-grow">
-                                    @if(!empty($candidate->interview->$videoField))
-                                        <div class="rounded-lg overflow-hidden bg-black aspect-video relative group shadow-inner">
-                                            <video controls class="w-full h-full object-contain">
-                                                <source src="{{ asset('storage/' . $candidate->interview->$videoField) }}" type="video/webm">
-                                                <source src="{{ asset('storage/' . $candidate->interview->$videoField) }}" type="video/mp4">
-                                                Browser Anda tidak mendukung pemutar video.
-                                            </video>
-                                        </div>
-                                        <div class="mt-3 text-xs text-green-600 font-bold flex items-center gap-1">
-                                            ✅ Video Tersimpan
-                                        </div>
-                                    @else
-                                        <div class="aspect-video bg-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-300">
-                                            <svg class="w-10 h-10 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                                            <span class="text-xs font-semibold">Video tidak ditemukan</span>
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
+                    @if($candidate->interview && $candidate->interview->video_answer_1)
+                        {{-- Debugging: Tampilkan path agar kita tahu apa yang tersimpan --}}
+                        <p class="text-xs text-gray-400 mb-2">Path Database: {{ $candidate->interview->video_answer_1 }}</p>
 
-                @else
-                    <div class="bg-yellow-50 text-yellow-800 p-6 rounded-xl border border-yellow-200 flex items-center gap-4">
-                        <span class="text-3xl">⏳</span>
-                        <div>
-                            <strong class="text-lg">Belum ada data interview.</strong>
-                            <p class="text-sm mt-1">Kandidat ini belum memulai atau menyelesaikan sesi perekaman video. Silakan kirim link interview ke kandidat.</p>
+                        <video controls class="w-full rounded-lg bg-black shadow-lg" style="max-height: 400px;">
+                            {{-- PENTING: Tambahkan 'storage/' di depan path dari database --}}
+                            <source src="{{ asset('ai-recruitment/storage/app/livewire-temp/' . $candidate->interview->video_answer_1) }}" type="video/webm">
+                            <source src="{{ asset('ai-recruitment/storage/app/livewire-temp/' . $candidate->interview->video_answer_1) }}" type="video/mp4">
+                            Maaf, browser Anda tidak mendukung pemutaran video ini.
+                        </video>
+                        
+                        {{-- Tombol Download Alternatif --}}
+                        <div class="mt-3 text-right">
+                            <a href="{{ asset('ai-recruitment/storage/app/livewire-temp/' . $candidate->interview->video_answer_1) }}" target="_blank" class="text-indigo-600 text-sm font-semibold hover:underline">
+                                ⬇️ Download / Tonton di Tab Baru
+                            </a>
                         </div>
-                    </div>
-                @endif
-            </div>
+                    @else
+                        <div class="p-6 bg-red-50 border border-red-100 rounded-lg text-center text-red-600">
+                            <svg class="w-10 h-10 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                            <p class="font-bold">Kandidat belum merekam video.</p>
+                        </div>
+                    @endif
+                </div>
+                </div>
 
             <div class="mt-10 border-t pt-8 pb-4">
                 <h2 class="text-2xl font-bold text-gray-900 mb-6">⚖️ Keputusan Akhir</h2>
