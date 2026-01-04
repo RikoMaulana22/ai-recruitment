@@ -20,7 +20,7 @@ class UploadCv extends Component
     public $phone;
     public $resume;
     
-    // Variabel ini digunakan untuk loading state di UI
+    // Loading state UI
     public $isAutoFilling = false;
 
     protected $rules = [
@@ -30,50 +30,43 @@ class UploadCv extends Component
         'resume' => 'required|file|mimes:pdf|max:2048',
     ];
 
-    // --- FITUR TAMBAHAN: Auto Fill saat file dipilih (Opsional) ---
-    // Fungsi ini akan jalan otomatis saat user memilih file PDF
     public function updatedResume() 
     {
-        $this->isAutoFilling = true; // Nyalakan loading di UI
-
-        // Validasi file dulu agar tidak error saat parsing
+        $this->isAutoFilling = true; 
         $this->validateOnly('resume');
 
         try {
-            // Jika kamu ingin fitur auto-fill nama/email dari PDF di sini
-            // Kamu bisa pindahkan logika Parser ke sini.
-            // Untuk sekarang, kita hanya simulasi loading sebentar.
+            // Simulasi loading atau logika parsing awal jika diperlukan
             sleep(1); 
         } catch (\Exception $e) {
-            // handle error
+            // silent fail
         }
 
-        $this->isAutoFilling = false; // Matikan loading
+        $this->isAutoFilling = false;
     }
-    // -------------------------------------------------------------
 
-    // UBAH NAMA DARI 'save' MENJADI 'submitForm'
     public function submitForm()
     {
         $this->validate();
 
-        // 1. Baca Teks PDF
+        // 1. Ekstrak Teks dari PDF
         $resumeText = '';
         try {
             $parser = new Parser();
             $pdf = $parser->parseFile($this->resume->getRealPath());
             $text = $pdf->getText();
             
-            // Bersihkan teks
+            // Bersihkan teks (hapus spasi berlebih) & batasi karakter agar tidak overload token AI
             $resumeText = preg_replace('/\s+/', ' ', trim($text));
-            $resumeText = substr($resumeText, 0, 5000);
+            $resumeText = substr($resumeText, 0, 5000); 
             
         } catch (\Exception $e) {
             Log::error("Gagal baca PDF: " . $e->getMessage());
+            // Lanjut saja, nanti Job akan cek jika resume_text kosong
         }
 
         // 2. Simpan File Fisik
-        $path = $this->resume->store('cv_uploads', 'public'); // Gunakan 'public' agar bisa diakses (opsional)
+        $path = $this->resume->store('cv_uploads', 'public');
 
         // 3. Simpan ke Database
         $candidate = Candidate::create([
@@ -85,11 +78,12 @@ class UploadCv extends Component
             'status' => 'pending'
         ]);
 
-        // 4. Panggil AI Job
-        AnalyzeResumeJob::dispatch($candidate->id);
+        // 4. Panggil AI Job (FIX: Mengirim Object Candidate, bukan ID)
+        AnalyzeResumeJob::dispatch($candidate);
 
         session()->flash('message', 'CV berhasil diunggah! Sedang diproses AI.');
 
+        // Pastikan route 'interview.start' sudah ada di web.php
         return redirect()->route('interview.start', ['candidate' => $candidate->id]);
     }
 

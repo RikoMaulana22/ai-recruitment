@@ -1,72 +1,83 @@
 <?php
 
-namespace App\Livewire\Candidate;
+namespace App\Jobs;
 
-use Livewire\Component;
-use Livewire\WithFileUploads;
 use App\Models\Candidate;
-use Livewire\Attributes\Layout;
-use App\Jobs\AnalyzeResumeJob;
-use Smalot\PdfParser\Parser; // Import Parser
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Gemini\Laravel\Facades\Gemini;
+use Illuminate\Support\Facades\Log;
 
-#[Layout('layouts.guest')]
-class UploadCv extends Component
+class AnalyzeResumeJob implements ShouldQueue
 {
-    use WithFileUploads;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $name;
-    public $email;
-    public $phone;
-    public $resume;
+    public $candidate;
 
-    protected $rules = [
-        'name' => 'required|min:3',
-        'email' => 'required|email|unique:candidates,email',
-        'phone' => 'required|numeric',
-        'resume' => 'required|file|mimes:pdf|max:2048',
-    ];
-
-    public function save()
+    public function __construct(Candidate $candidate)
     {
-        $this->validate();
-
-        // 1. Baca Teks PDF DULU sebelum simpan ke DB
-        $resumeText = '';
-        try {
-            $parser = new Parser();
-            // Baca dari file temporary livewire
-            $pdf = $parser->parseFile($this->resume->getRealPath());
-            $text = $pdf->getText();
-            // Bersihkan teks (hapus spasi berlebih)
-            $resumeText = preg_replace('/\s+/', ' ', trim($text));
-            // Potong max 5000 karakter agar database tidak penuh
-            $resumeText = substr($resumeText, 0, 5000);
-        } catch (\Exception $e) {
-            // Jika gagal baca, biarkan kosong tapi jangan error
-            \Log::error("Gagal baca PDF: " . $e->getMessage());
-        }
-
-        // 2. Simpan File Fisik
-        $path = $this->resume->store('cv_uploads', 'local');
-
-        // 3. Simpan ke Database (Sekarang 'resume_text' sudah terisi!)
-        $candidate = Candidate::create([
-            'name' => $this->name,
-            'email' => $this->email,
-            'phone' => $this->phone,
-            'resume_path' => $path,
-            'resume_text' => $resumeText, // <--- INI KUNCINYA
-            'status' => 'pending'
-        ]);
-
-        // 4. Panggil AI Job (Job sekarang tugasnya hanya analisa, bukan baca PDF lagi)
-        AnalyzeResumeJob::dispatch($candidate->id);
-
-        return redirect()->route('interview.start', ['candidate' => $candidate->id]);
+        $this->candidate = $candidate;
     }
 
-    public function render()
+    public function handle(): void
     {
-        return view('livewire.candidate.upload-cv');
+        if (!$this->candidate->resume_text) {
+            return;
+        }
+
+        try {
+            // --- PROMPT ENGINEERING KHUSUS HRD ---
+            $prompt = "
+            Bertindaklah sebagai Senior HR Recruiter. Tugasmu adalah menganalisis teks CV pelamar di bawah ini untuk posisi Developer/General (sesuaikan konteks).
+            
+            TEKS CV:
+            {$this->candidate->resume_text}
+
+            Tolong berikan analisis mendalam dalam format JSON yang valid (tanpa markdown ```json).
+            Analisis harus mencakup:
+            1. 'summary': Ringkasan profesional pelamar (Bahasa Indonesia, max 2 kalimat).
+            2. 'pros': Array berisi 3-5 poin kelebihan/kekuatan utama pelamar.
+            3. 'cons': Array berisi 3-5 poin kekurangan/hal yang perlu diklarifikasi saat interview.
+            4. 'recommendation': Saran untuk HR (Sangat Disarankan / Dipertimbangkan / Tidak Disarankan) beserta alasannya singkat.
+            5. 'score': Nilai kecocokan dari 0-100 (integer).
+
+            Struktur JSON wajib seperti ini:
+            {
+                \"summary\": \"...\",
+                \"pros\": [\"...\", \"...\"],
+                \"cons\": [\"...\", \"...\"],
+                \"recommendation\": \"...\",
+                \"score\": 85
+            }
+            ";
+
+            // Eksekusi Gemini
+            $result = Gemini::geminiPro()->generateContent($prompt);
+            $rawText = $result->text();
+
+            // Membersihkan format jika Gemini memberikan Markdown block
+            $cleanJson = str_replace(['```json', '```'], '', $rawText);
+            $analysisData = json_decode($cleanJson, true);
+
+            // Jika gagal decode JSON, simpan raw text sebagai fallback
+            if (!$analysisData) {
+                Log::error('Gagal decode JSON dari Gemini', ['response' => $rawText]);
+                return;
+            }
+
+            // Update Database
+            $this->candidate->update([
+                'status' => 'analyzed',
+                'score' => $analysisData['score'] ?? 0,
+                'ai_summary' => $analysisData['summary'] ?? '-', // Ringkasan singkat
+                'ai_analysis' => $analysisData, // Simpan JSON lengkap (untuk pros/cons)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error analyzing resume: " . $e->getMessage());
+        }
     }
 }

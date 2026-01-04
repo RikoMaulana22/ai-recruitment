@@ -14,7 +14,7 @@ class GeminiService
     {
         $this->apiKey = env('GEMINI_API_KEY');
         // REVISI: Gunakan 1.5-flash (2.5 belum ada)
-        $this->baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+        $this->baseUrl = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}";
     }
 
     public function generateJsonContent($prompt, $systemInstruction = null)
