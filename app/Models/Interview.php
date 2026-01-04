@@ -14,10 +14,14 @@ class Interview extends Model
         'chat_history',
         'interview_score',
         'interview_summary',
+        // --- TAMBAHKAN 3 BARIS INI ---
+        'video_answer_1',
+        'video_answer_2',
+        'video_answer_3',
     ];
 
     protected $casts = [
-        'chat_history' => 'array', // Penting: Agar JSON otomatis jadi Array
+        'chat_history' => 'array',
     ];
 
     public function candidate()

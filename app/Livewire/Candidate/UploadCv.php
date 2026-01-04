@@ -6,7 +6,7 @@ use Livewire\Component;
 use Livewire\WithFileUploads;
 use App\Models\Candidate;
 use Livewire\Attributes\Layout;
-use App\Services\GeminiService;
+use App\Jobs\AnalyzeResumeJob;
 use Smalot\PdfParser\Parser;
 use Illuminate\Support\Facades\Log;
 
@@ -15,83 +15,81 @@ class UploadCv extends Component
 {
     use WithFileUploads;
 
-    // Data Form
     public $name;
     public $email;
     public $phone;
-    public $summary;
-    public $skills;
-    
-    // File Upload
     public $resume;
     
-    // State UI
-    public $isAutoFilling = false; // Untuk loading indicator
+    // Variabel ini digunakan untuk loading state di UI
+    public $isAutoFilling = false;
 
     protected $rules = [
         'name' => 'required|min:3',
         'email' => 'required|email|unique:candidates,email',
         'phone' => 'required|numeric',
         'resume' => 'required|file|mimes:pdf|max:2048',
-        'summary' => 'required|string',
     ];
 
-    // Magic Method: Jalan otomatis saat user memilih file 'resume'
-    public function updatedResume()
+    // --- FITUR TAMBAHAN: Auto Fill saat file dipilih (Opsional) ---
+    // Fungsi ini akan jalan otomatis saat user memilih file PDF
+    public function updatedResume() 
     {
+        $this->isAutoFilling = true; // Nyalakan loading di UI
+
+        // Validasi file dulu agar tidak error saat parsing
         $this->validateOnly('resume');
-        $this->isAutoFilling = true; // Nyalakan loading
 
         try {
-            // 1. Baca Teks PDF
-            $parser = new Parser();
-            $pdf = $parser->parseFile($this->resume->getRealPath());
-            $text = substr($pdf->getText(), 0, 4000); // Ambil 4000 karakter pertama
-
-            // 2. Panggil AI untuk Ekstraksi
-            $gemini = new GeminiService();
-            $data = $gemini->extractDataFromCvText($text);
-
-            // 3. Auto-fill Form
-            if ($data) {
-                $this->name = $data['name'] ?? '';
-                $this->email = $data['email'] ?? '';
-                $this->phone = $data['phone'] ?? '';
-                $this->summary = $data['summary'] ?? '';
-                // Jika skills array, gabungkan jadi string koma
-                $this->skills = is_array($data['skills'] ?? '') 
-                    ? implode(', ', $data['skills']) 
-                    : ($data['skills'] ?? '');
-            }
-
+            // Jika kamu ingin fitur auto-fill nama/email dari PDF di sini
+            // Kamu bisa pindahkan logika Parser ke sini.
+            // Untuk sekarang, kita hanya simulasi loading sebentar.
+            sleep(1); 
         } catch (\Exception $e) {
-            Log::error("Gagal Auto-fill: " . $e->getMessage());
+            // handle error
         }
 
         $this->isAutoFilling = false; // Matikan loading
     }
+    // -------------------------------------------------------------
 
+    // UBAH NAMA DARI 'save' MENJADI 'submitForm'
     public function submitForm()
     {
         $this->validate();
 
-        // 1. Simpan File Fisik
-        $path = $this->resume->store('cv_uploads', 'public'); // Simpan di storage/app/public
+        // 1. Baca Teks PDF
+        $resumeText = '';
+        try {
+            $parser = new Parser();
+            $pdf = $parser->parseFile($this->resume->getRealPath());
+            $text = $pdf->getText();
+            
+            // Bersihkan teks
+            $resumeText = preg_replace('/\s+/', ' ', trim($text));
+            $resumeText = substr($resumeText, 0, 5000);
+            
+        } catch (\Exception $e) {
+            Log::error("Gagal baca PDF: " . $e->getMessage());
+        }
 
-        // 2. Simpan Data ke Database
+        // 2. Simpan File Fisik
+        $path = $this->resume->store('cv_uploads', 'public'); // Gunakan 'public' agar bisa diakses (opsional)
+
+        // 3. Simpan ke Database
         $candidate = Candidate::create([
             'name' => $this->name,
             'email' => $this->email,
             'phone' => $this->phone,
             'resume_path' => $path,
-            'ai_summary' => $this->summary, // Simpan ringkasan hasil edit user
-            // Simpan skills di kolom json atau text (sesuaikan struktur DB Anda)
-             'ai_analysis' => ['skills' => explode(',', $this->skills)], 
+            'resume_text' => $resumeText,
             'status' => 'pending'
         ]);
 
-        // 3. Redirect ke Halaman Interview (Video/Chat)
-        // Kita kirim ID kandidat agar halaman selanjutnya tahu siapa yg sedang interview
+        // 4. Panggil AI Job
+        AnalyzeResumeJob::dispatch($candidate->id);
+
+        session()->flash('message', 'CV berhasil diunggah! Sedang diproses AI.');
+
         return redirect()->route('interview.start', ['candidate' => $candidate->id]);
     }
 

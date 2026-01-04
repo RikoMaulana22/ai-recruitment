@@ -41,7 +41,6 @@ class VideoRecorder extends Component
 
         // Simpan File
         $path = $this->videoFile->store('interview_videos', 'public');
-
         // Update Database
         $column = 'video_answer_' . $this->currentStep;
         $this->interview->update([$column => $path]);
@@ -53,7 +52,7 @@ class VideoRecorder extends Component
         if ($this->currentStep < 3) {
             $this->currentStep++;
             // Kirim sinyal ke JS untuk reset kamera
-            $this->dispatch('step-complete'); 
+            $this->dispatch('step-complete');
         } else {
             // Jika sudah selesai semua, panggil AI
             GradeInterviewJob::dispatch($this->interview->id);

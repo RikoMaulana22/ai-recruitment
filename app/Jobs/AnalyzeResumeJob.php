@@ -1,73 +1,72 @@
 <?php
 
-namespace App\Jobs;
+namespace App\Livewire\Candidate;
 
+use Livewire\Component;
+use Livewire\WithFileUploads;
 use App\Models\Candidate;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
-use Smalot\PdfParser\Parser;
-use App\Services\GeminiService;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+use Livewire\Attributes\Layout;
+use App\Jobs\AnalyzeResumeJob;
+use Smalot\PdfParser\Parser; // Import Parser
 
-class AnalyzeResumeJob implements ShouldQueue
+#[Layout('layouts.guest')]
+class UploadCv extends Component
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use WithFileUploads;
 
-    public $candidateId;
+    public $name;
+    public $email;
+    public $phone;
+    public $resume;
 
-    public function __construct($candidateId)
+    protected $rules = [
+        'name' => 'required|min:3',
+        'email' => 'required|email|unique:candidates,email',
+        'phone' => 'required|numeric',
+        'resume' => 'required|file|mimes:pdf|max:2048',
+    ];
+
+    public function save()
     {
-        $this->candidateId = $candidateId;
-    }
+        $this->validate();
 
-    public function handle(GeminiService $gemini): void
-    {
-        $candidate = Candidate::find($this->candidateId);
-        if (!$candidate) return;
-
-        // Gunakan Storage facade agar path benar (local/s3/public)
-        $filePath = Storage::disk('local')->path($candidate->resume_path);
-        
-        // 1. Parse PDF
+        // 1. Baca Teks PDF DULU sebelum simpan ke DB
+        $resumeText = '';
         try {
             $parser = new Parser();
-            $pdf = $parser->parseFile($filePath);
-            $cleanText = preg_replace('/\s+/', ' ', trim($pdf->getText()));
-            
-            // Simpan teks mentah untuk keperluan debugging/history
-            $candidate->update(['resume_text' => substr($cleanText, 0, 5000)]);
+            // Baca dari file temporary livewire
+            $pdf = $parser->parseFile($this->resume->getRealPath());
+            $text = $pdf->getText();
+            // Bersihkan teks (hapus spasi berlebih)
+            $resumeText = preg_replace('/\s+/', ' ', trim($text));
+            // Potong max 5000 karakter agar database tidak penuh
+            $resumeText = substr($resumeText, 0, 5000);
         } catch (\Exception $e) {
-            Log::error("PDF Parser Error: " . $e->getMessage());
-            return;
+            // Jika gagal baca, biarkan kosong tapi jangan error
+            \Log::error("Gagal baca PDF: " . $e->getMessage());
         }
 
-        // 2. Analisis Mendalam oleh AI
-        $prompt = "
-            Analisis teks CV berikut.
-            CV TEXT: " . substr($cleanText, 0, 4000) . "
-            
-            OUTPUT JSON (Strict):
-            {
-                \"summary\": \"Ringkasan profesional kandidat (Bahasa Indonesia)\",
-                \"skills\": [\"List\", \"Teknis\", \"Skill\"],
-                \"score\": (0-100 relevansi untuk posisi Staff IT),
-                \"recommendation\": \"HIRE\" atau \"REJECT\"
-            }
-        ";
+        // 2. Simpan File Fisik
+        $path = $this->resume->store('cv_uploads', 'local');
 
-        $data = $gemini->generateJsonContent($prompt, "Anda adalah Senior HR Recruiter.");
+        // 3. Simpan ke Database (Sekarang 'resume_text' sudah terisi!)
+        $candidate = Candidate::create([
+            'name' => $this->name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'resume_path' => $path,
+            'resume_text' => $resumeText, // <--- INI KUNCINYA
+            'status' => 'pending'
+        ]);
 
-        if ($data) {
-            $candidate->update([
-                'ai_analysis' => $data,
-                'score' => $data['score'] ?? 0,
-                'ai_summary' => $data['summary'] ?? '-',
-                'status' => 'analyzed'
-            ]);
-        }
+        // 4. Panggil AI Job (Job sekarang tugasnya hanya analisa, bukan baca PDF lagi)
+        AnalyzeResumeJob::dispatch($candidate->id);
+
+        return redirect()->route('interview.start', ['candidate' => $candidate->id]);
+    }
+
+    public function render()
+    {
+        return view('livewire.candidate.upload-cv');
     }
 }

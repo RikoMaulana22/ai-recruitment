@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use Livewire\Component;
 use App\Models\Candidate;
+use App\Jobs\GradeInterviewJob;
 use Livewire\Attributes\Layout;
 
 #[Layout('layouts.app')]
@@ -11,32 +12,39 @@ class CandidateDetail extends Component
 {
     public Candidate $candidate;
 
-    // Fungsi mount otomatis jalan saat halaman dibuka
     public function mount(Candidate $candidate)
     {
         $this->candidate = $candidate;
     }
 
-    public function render()
+    public function regrade($interviewId)
     {
-        return view('livewire.admin.candidate-detail');
+        // Panggil Job
+        GradeInterviewJob::dispatch($interviewId);
+        
+        // Beri feedback visual (opsional, karena poll akan handle sisanya)
+        session()->flash('message', 'Perintah penilaian ulang dikirim ke AI.');
     }
 
+    // TERIMA ATAU TOLAK
     public function accept()
     {
         $this->candidate->update(['status' => 'accepted']);
-        session()->flash('message', 'Selamat! Kandidat berhasil DITERIMA.');
+        session()->flash('message', 'Kandidat berhasil diterima!');
     }
 
     public function reject()
     {
         $this->candidate->update(['status' => 'rejected']);
-        session()->flash('message', 'Kandidat telah DITOLAK.');
+        session()->flash('message', 'Kandidat telah ditolak.');
     }
 
-    public function regrade($interviewId)
-{
-    \App\Jobs\GradeInterviewJob::dispatch($interviewId);
-    session()->flash('message', 'Perintah penilaian ulang dikirim ke AI. Tunggu sebentar...');
-}
+    public function render()
+    {
+        // [FIX] Paksa ambil data terbaru dari database setiap kali render (polling)
+        $this->candidate->refresh(); 
+        
+        
+        return view('livewire.admin.candidate-detail');
+    }
 }
